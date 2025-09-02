@@ -27,24 +27,24 @@ def load_preprocessed_rag_base() -> tuple[pd.DataFrame | None, np.ndarray | None
         return None, None
 
 class GeminiRAG:
-    def __init__(self):
+    def __init__(self, api_key: str):
         """
         Inicializa o sistema RAG, configurando a API do Gemini e carregando a base de dados.
+        Agora recebe a api_key como um argumento.
         """
         self.rag_df = None
         self.rag_embeddings = None
         self.model = None
         self._ready = False
 
+        if not api_key:
+            st.error("A chave da API fornecida está vazia.")
+            raise ValueError("A chave da API não pode ser vazia.")
+        
         try:
-            api_key = st.secrets.get("GEMINI_API_KEY")
-            if not api_key:
-                st.error("Chave 'GEMINI_API_KEY' não encontrada nos secrets do Streamlit.")
-                raise ValueError("API Key não encontrada.")
-            
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
-            logging.info("Modelo Gemini carregado com sucesso.")
+            logging.info("Modelo Gemini configurado com sucesso.")
 
             with st.spinner("Carregando base de conhecimento..."):
                 self.rag_df, self.rag_embeddings = load_preprocessed_rag_base()
@@ -56,8 +56,10 @@ class GeminiRAG:
                 self._ready = True
 
         except Exception as e:
+            st.error(f"Erro ao inicializar o modelo Gemini. Verifique se a chave da API é válida. Detalhes: {e}")
             logging.error(f"Erro durante a inicialização da classe GeminiRAG: {e}")
-            # A mensagem de erro para o usuário já foi emitida, aqui apenas logamos.
+            # Lançamos a exceção para que a interface possa lidar com ela.
+            raise
 
     def is_ready(self) -> bool:
         """Verifica se o sistema RAG está pronto para uso."""
@@ -71,7 +73,6 @@ class GeminiRAG:
             return "Base de conhecimento indisponível."
 
         try:
-            # 1. Gerar embedding para a pergunta do usuário
             query_embedding_result = genai.embed_content(
                 model='models/text-embedding-004',
                 content=[query_text],
@@ -79,13 +80,8 @@ class GeminiRAG:
             )
             query_embedding = np.array(query_embedding_result['embedding']).reshape(1, -1)
             
-            # 2. Calcular similaridade com os embeddings da base de dados
             similarities = cosine_similarity(query_embedding, self.rag_embeddings)[0]
-            
-            # 3. Obter os índices dos chunks mais similares
             top_k_indices = similarities.argsort()[-top_k:][::-1]
-            
-            # 4. Recuperar e formatar os chunks de texto
             relevant_chunks = self.rag_df.iloc[top_k_indices]
             
             context = "\n\n---\n\n".join(relevant_chunks['Answer_Chunk'].tolist())
@@ -103,13 +99,11 @@ class GeminiRAG:
 
         start_time = time.time()
         
-        # Passo 1: Obter o contexto relevante da nossa base de dados
         relevant_context = self._find_relevant_chunks(question, top_k=7)
         
         if "indisponível" in relevant_context or "Erro" in relevant_context:
             answer = "Não foi possível consultar a base de conhecimento para responder à sua pergunta."
         else:
-            # Passo 2: Construir o prompt e chamar o modelo generativo
             prompt = f"""
             Você é um assistente especialista. Sua tarefa é responder à pergunta do usuário de forma precisa e detalhada, baseando-se ESTREITAMENTE no contexto fornecido abaixo. Não utilize conhecimento externo.
 
@@ -135,5 +129,4 @@ class GeminiRAG:
         elapsed_time = end_time - start_time
 
         return answer, elapsed_time
-
 
