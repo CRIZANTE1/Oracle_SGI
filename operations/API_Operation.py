@@ -30,35 +30,43 @@ class GeminiRAG:
     def __init__(self, api_key: str):
         """
         Inicializa o sistema RAG, configurando a API do Gemini e carregando a base de dados.
-        Agora recebe a api_key como um argumento.
         """
-        self.rag_df = None
-        self.rag_embeddings = None
         self.model = None
-        self._ready = False
+        self._ready = False # Inicia como Falso por padrão
 
         if not api_key:
             st.error("A chave da API fornecida está vazia.")
             raise ValueError("A chave da API não pode ser vazia.")
         
+        # Carrega a base de conhecimento PRIMEIRO, antes de configurar a API
+        # Isso economiza chamadas de API se os arquivos locais estiverem faltando.
+        with st.spinner("Carregando base de conhecimento..."):
+            self.rag_df, self.rag_embeddings = load_preprocessed_rag_base()
+
+        # Verifica o resultado do carregamento e mostra as mensagens apropriadas (SUA LÓGICA IMPLEMENTADA AQUI)
+        if self.rag_df is None or self.rag_embeddings is None:
+            st.error("ERRO CRÍTICO: Arquivos da base de conhecimento ('rag_dataframe.pkl' ou 'rag_embeddings.npy') não encontrados. A funcionalidade de IA será desativada.")
+            # Garante que os atributos sejam DataFrames vazios para evitar erros posteriores
+            self.rag_df = pd.DataFrame()
+            self.rag_embeddings = np.array([])
+            # self._ready continua False, o que desativa a UI principal
+            return # Interrompe a inicialização aqui
+        else:
+            st.toast("Base de conhecimento carregada com sucesso.", icon="🧠")
+
+        # Se a base de conhecimento carregou, prossiga com a configuração da API
         try:
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
             logging.info("Modelo Gemini configurado com sucesso.")
-
-            with st.spinner("Carregando base de conhecimento..."):
-                self.rag_df, self.rag_embeddings = load_preprocessed_rag_base()
-
-            if self.rag_df is None or self.rag_embeddings is None:
-                st.error("ERRO CRÍTICO: Não foi possível carregar os arquivos da base de conhecimento. A funcionalidade de IA será desativada.")
-            else:
-                st.toast("Base de conhecimento carregada com sucesso!", icon="🧠")
-                self._ready = True
+            # Somente se a base e a API estiverem OK, o sistema está pronto
+            self._ready = True
 
         except Exception as e:
             st.error(f"Erro ao inicializar o modelo Gemini. Verifique se a chave da API é válida. Detalhes: {e}")
             logging.error(f"Erro durante a inicialização da classe GeminiRAG: {e}")
-            # Lançamos a exceção para que a interface possa lidar com ela.
+            # Se a API falhar, o sistema também não está pronto
+            self._ready = False
             raise
 
     def is_ready(self) -> bool:
