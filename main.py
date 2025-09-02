@@ -8,13 +8,13 @@ def main():
         # Default role to admin to show all pages
         st.session_state.role = 'admin'
         
-        pages = ['Página 1', 'Sobre']
+        pages = ['Análise com IA', 'Sobre']
         if st.session_state.role == 'admin':
             pages.append('Cadastro de Usuário')
 
         page = st.sidebar.radio("Selecione a página", pages)
 
-        if page == "Página 1":
+        if page == "Análise com IA":
                 page_1()
         elif page == "Sobre":
                 show_about_page()
