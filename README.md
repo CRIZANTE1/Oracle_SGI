@@ -34,12 +34,6 @@ Estas instruções fornecerão uma cópia do projeto em funcionamento em sua má
     pip install -r requirements.txt
     ```
 
-4.  Configure sua chave de API do Gemini. Crie uma pasta chamada `.streamlit` na raiz do seu projeto. Dentro dela, crie um arquivo chamado `secrets.toml` e adicione sua chave:
-    ```toml
-    # .streamlit/secrets.toml
-    GEMINI_API_KEY="SUA_CHAVE_API_AQUI"
-    ```
-
 ### Executando o Aplicativo
 
 Para iniciar o aplicativo, execute o seguinte comando no seu terminal:
