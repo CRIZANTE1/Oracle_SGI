@@ -57,7 +57,7 @@ class GeminiRAG:
         # Se a base de conhecimento carregou, prossiga com a configuração da API
         try:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
+            self.model = genai.GenerativeModel('gemini-2.5-pro')
             logging.info("Modelo Gemini configurado com sucesso.")
             # Somente se a base e a API estiverem OK, o sistema está pronto
             self._ready = True
