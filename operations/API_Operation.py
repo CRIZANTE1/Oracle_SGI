@@ -5,6 +5,7 @@ import numpy as np
 import time
 from sklearn.metrics.pairwise import cosine_similarity
 import logging
+import ollama 
 
 logging.basicConfig(level=logging.INFO)
 
@@ -12,7 +13,6 @@ logging.basicConfig(level=logging.INFO)
 def load_preprocessed_rag_base() -> tuple[pd.DataFrame | None, np.ndarray | None]:
     """
     Carrega o DataFrame e os embeddings pré-processados de arquivos locais.
-    Retorna None em caso de falha para que a classe possa lidar com o erro.
     """
     try:
         df = pd.read_pickle("rag_dataframe.pkl")
@@ -29,15 +29,14 @@ def load_preprocessed_rag_base() -> tuple[pd.DataFrame | None, np.ndarray | None
 class GeminiRAG:
     def __init__(self, api_key: str):
         """
-        Inicializa o sistema RAG, configurando a API do Gemini e carregando a base de dados.
+        Inicializa o sistema RAG.
+        - Carrega a base de dados local.
+        - Configura a API do Gemini para a GERAÇÃO de respostas.
         """
-        self.model = None
+        self.model_generator = None # Modelo para gerar a resposta final
         self._ready = False
 
-        if not api_key:
-            st.error("A chave da API fornecida está vazia.")
-            raise ValueError("A chave da API não pode ser vazia.")
-        
+        # Carrega a base de conhecimento primeiro
         with st.spinner("Carregando base de conhecimento..."):
             self.rag_df, self.rag_embeddings = load_preprocessed_rag_base()
 
@@ -49,15 +48,20 @@ class GeminiRAG:
         else:
             st.toast("Base de conhecimento carregada com sucesso.", icon="🧠")
 
+        # Configura o modelo de GERAÇÃO (Google Gemini)
         try:
+            if not api_key:
+                st.error("A chave da API do Gemini não foi fornecida.")
+                raise ValueError("A chave da API não pode ser vazia.")
+                
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-pro')
-            logging.info("Modelo Gemini configurado com sucesso.")
+            self.model_generator = genai.GenerativeModel('gemini-1.5-pro-latest')
+            logging.info("Modelo Gerador (Gemini) configurado com sucesso.")
             self._ready = True
 
         except Exception as e:
             st.error(f"Erro ao inicializar o modelo Gemini. Verifique se a chave da API é válida. Detalhes: {e}")
-            logging.error(f"Erro durante a inicialização da classe GeminiRAG: {e}")
+            logging.error(f"Erro durante a inicialização do modelo Gemini: {e}")
             self._ready = False
             raise
 
@@ -67,18 +71,19 @@ class GeminiRAG:
 
     def _find_relevant_chunks(self, query_text: str, top_k: int = 5) -> str:
         """
-        Encontra os chunks mais relevantes na base de conhecimento para uma dada pergunta.
+        Encontra os chunks mais relevantes usando Ollama/nomic-embed-text.
         """
         if not self.is_ready():
             return "Base de conhecimento indisponível."
 
         try:
 
-            query_embedding_result = genai.embed_content(
-                model='models/embedding-001',
-                content=[query_text]
+            response = ollama.embeddings(
+                model='nomic-embed-text:latest',
+                prompt=query_text
             )
-            query_embedding = np.array(query_embedding_result['embedding']).reshape(1, -1)
+            query_embedding = np.array(response['embedding']).reshape(1, -1)
+            # --- FIM DA MUDANÇA ---
             
             similarities = cosine_similarity(query_embedding, self.rag_embeddings)[0]
             top_k_indices = similarities.argsort()[-top_k:][::-1]
@@ -87,12 +92,12 @@ class GeminiRAG:
             context = "\n\n---\n\n".join(relevant_chunks['Answer_Chunk'].tolist())
             return context
         except Exception as e:
-            st.warning(f"Erro durante a busca na base de conhecimento: {e}")
+            st.error(f"Erro ao conectar com o Ollama para busca. Verifique se o serviço Ollama está rodando. Detalhes: {e}")
             return "Erro ao buscar informações relevantes."
 
     def answer_question(self, question: str) -> tuple[str, float]:
         """
-        Orquestra o processo de responder a uma pergunta usando RAG.
+        Orquestra o processo: busca com Ollama, geração com Gemini.
         """
         if not self.is_ready():
             return "O sistema de IA não está operacional.", 0
@@ -101,46 +106,32 @@ class GeminiRAG:
         
         relevant_context = self._find_relevant_chunks(question, top_k=7)
         
-        if "indisponível" in relevant_context or "Erro" in relevant_context:
-            answer = "Não foi possível consultar a base de conhecimento para responder à sua pergunta."
+        if "Erro" in relevant_context or not relevant_context.strip():
+            answer = "Não foi possível consultar a base de conhecimento ou encontrar informações relevantes para responder à sua pergunta."
         else:
             prompt = f"""
             **Persona:** Você é um Oráculo Analítico, especialista na norma ISO 45001.
-
-            **Missão Crítica:** Sua tarefa é responder à **Pergunta do Usuário** usando **única e exclusivamente** as informações contidas no **Contexto Relevante** fornecido abaixo. Sua fidelidade ao texto é absoluta.
-
-            **REGRAS DE OURO (NÃO QUEBRE ESTAS REGRAS):**
-
-            1.  **SE A RESPOSTA ESTIVER NO CONTEXTO:** Responda à pergunta de forma clara e objetiva, baseando-se estritamente nos trechos fornecidos. Você pode citar ou parafrasear o conteúdo, mas não adicione informações externas.
-
-            2.  **SE A RESPOSTA NÃO ESTIVER NO CONTEXTO:** Esta é a regra mais importante. Se o contexto não contém informações sobre o tema da pergunta, sua única ação é responder com uma declaração clara de que a informação não foi encontrada.
-                - **NÃO** tente adivinhar a resposta.
-                - **NÃO** utilize seu conhecimento geral sobre outros assuntos ou normas (como NR-01, PGR, NR-35, etc.).
-                - **NÃO** resuma o conteúdo do contexto se ele for irrelevante para a pergunta. Simplesmente declare que o tópico específico não foi abordado.
-
-            **Exemplo de uma recusa correta:**
-            Se a pergunta for "O que é o PGR da NR-01?" e o contexto só falar de ISO 45001, sua resposta deve ser:
-            *"Com base estrita no contexto fornecido, não há informações sobre o PGR (Programa de Gerenciamento de Riscos) ou a NR 01."*
-
+            **Missão Crítica:** Sua tarefa é responder à **Pergunta do Usuário** usando **única e exclusivamente** as informações contidas no **Contexto Relevante**.
+            **REGRAS DE OURO:**
+            1. **SE A RESPOSTA ESTIVER NO CONTEXTO:** Responda à pergunta de forma clara, baseando-se estritamente nos trechos fornecidos.
+            2. **SE A RESPOSTA NÃO ESTIVER NO CONTEXTO:** Responda com uma declaração clara de que a informação não foi encontrada. **NÃO** utilize conhecimento externo ou resuma conteúdo irrelevante. Exemplo: *"Com base estrita no contexto fornecido, não há informações sobre o tópico solicitado."*
             ---
             **Contexto Relevante (Sua única fonte da verdade):**
             {relevant_context}
             ---
-
             **Pergunta do Usuário:**
             {question}
-
             **Sua Resposta (Siga as Regras de Ouro):**
             """
             
             try:
-                response = self.model.generate_content(prompt)
+                # Usando o modelo gerador do Gemini para a resposta final
+                response = self.model_generator.generate_content(prompt)
                 answer = response.text
             except Exception as e:
-                st.error(f"Erro ao gerar a resposta com o modelo de IA: {e}")
+                st.error(f"Erro ao gerar a resposta com o modelo Gemini: {e}")
                 answer = "Ocorreu um erro ao tentar gerar a resposta final."
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-
         return answer, elapsed_time
