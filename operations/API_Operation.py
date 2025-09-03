@@ -51,7 +51,7 @@ class GeminiRAG:
                 raise ValueError("A chave da API não pode ser vazia.")
                 
             genai.configure(api_key=api_key)
-            self.model_generator = genai.GenerativeModel('gemini-1.5-pro-latest')
+            self.model_generator = genai.GenerativeModel('gemini-2.5-pro)
             logging.info("Modelo Gerador (Gemini) configurado com sucesso.")
             self._ready = True
 
