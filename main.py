@@ -4,7 +4,7 @@ from operations.frontend import page_1, show_about_page
 # Configuração da página atualizada para refletir o tema
 st.set_page_config(
     page_title="Oráculo de SSO", 
-    page_icon=" ⚡", 
+    page_icon="⚡", 
     layout="wide"
 )
 
