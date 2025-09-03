@@ -73,10 +73,10 @@ class GeminiRAG:
             return "Base de conhecimento indisponível."
 
         try:
+
             query_embedding_result = genai.embed_content(
-                model='models/gemini-embedding-001',
-                content=[query_text],
-                task_type="RETRIEVAL_QUERY"
+                model='models/embedding-001',
+                content=[query_text]
             )
             query_embedding = np.array(query_embedding_result['embedding']).reshape(1, -1)
             
@@ -104,7 +104,6 @@ class GeminiRAG:
         if "indisponível" in relevant_context or "Erro" in relevant_context:
             answer = "Não foi possível consultar a base de conhecimento para responder à sua pergunta."
         else:
-            # --- PROMPT APRIMORADO ---
             prompt = f"""
             **Persona:** Você é um Oráculo Analítico, especialista na norma ISO 45001.
 
@@ -145,4 +144,3 @@ class GeminiRAG:
         elapsed_time = end_time - start_time
 
         return answer, elapsed_time
-
