@@ -32,40 +32,32 @@ class GeminiRAG:
         Inicializa o sistema RAG, configurando a API do Gemini e carregando a base de dados.
         """
         self.model = None
-        self._ready = False # Inicia como Falso por padrão
+        self._ready = False
 
         if not api_key:
             st.error("A chave da API fornecida está vazia.")
             raise ValueError("A chave da API não pode ser vazia.")
         
-        # Carrega a base de conhecimento PRIMEIRO, antes de configurar a API
-        # Isso economiza chamadas de API se os arquivos locais estiverem faltando.
         with st.spinner("Carregando base de conhecimento..."):
             self.rag_df, self.rag_embeddings = load_preprocessed_rag_base()
 
-        # Verifica o resultado do carregamento e mostra as mensagens apropriadas (SUA LÓGICA IMPLEMENTADA AQUI)
         if self.rag_df is None or self.rag_embeddings is None:
             st.error("ERRO CRÍTICO: Arquivos da base de conhecimento ('rag_dataframe.pkl' ou 'rag_embeddings.npy') não encontrados. A funcionalidade de IA será desativada.")
-            # Garante que os atributos sejam DataFrames vazios para evitar erros posteriores
             self.rag_df = pd.DataFrame()
             self.rag_embeddings = np.array([])
-            # self._ready continua False, o que desativa a UI principal
-            return # Interrompe a inicialização aqui
+            return
         else:
             st.toast("Base de conhecimento carregada com sucesso.", icon="🧠")
 
-        # Se a base de conhecimento carregou, prossiga com a configuração da API
         try:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-pro')
+            self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
             logging.info("Modelo Gemini configurado com sucesso.")
-            # Somente se a base e a API estiverem OK, o sistema está pronto
             self._ready = True
 
         except Exception as e:
             st.error(f"Erro ao inicializar o modelo Gemini. Verifique se a chave da API é válida. Detalhes: {e}")
             logging.error(f"Erro durante a inicialização da classe GeminiRAG: {e}")
-            # Se a API falhar, o sistema também não está pronto
             self._ready = False
             raise
 
@@ -112,18 +104,34 @@ class GeminiRAG:
         if "indisponível" in relevant_context or "Erro" in relevant_context:
             answer = "Não foi possível consultar a base de conhecimento para responder à sua pergunta."
         else:
+            # --- PROMPT APRIMORADO ---
             prompt = f"""
-            Você é um assistente especialista. Sua tarefa é responder à pergunta do usuário de forma precisa e detalhada, baseando-se ESTREITAMENTE no contexto fornecido abaixo. Não utilize conhecimento externo.
+            **Persona:** Você é um Oráculo Analítico, especialista na norma ISO 45001.
 
-            **Contexto da Base de Conhecimento:**
+            **Missão Crítica:** Sua tarefa é responder à **Pergunta do Usuário** usando **única e exclusivamente** as informações contidas no **Contexto Relevante** fornecido abaixo. Sua fidelidade ao texto é absoluta.
+
+            **REGRAS DE OURO (NÃO QUEBRE ESTAS REGRAS):**
+
+            1.  **SE A RESPOSTA ESTIVER NO CONTEXTO:** Responda à pergunta de forma clara e objetiva, baseando-se estritamente nos trechos fornecidos. Você pode citar ou parafrasear o conteúdo, mas não adicione informações externas.
+
+            2.  **SE A RESPOSTA NÃO ESTIVER NO CONTEXTO:** Esta é a regra mais importante. Se o contexto não contém informações sobre o tema da pergunta, sua única ação é responder com uma declaração clara de que a informação não foi encontrada.
+                - **NÃO** tente adivinhar a resposta.
+                - **NÃO** utilize seu conhecimento geral sobre outros assuntos ou normas (como NR-01, PGR, NR-35, etc.).
+                - **NÃO** resuma o conteúdo do contexto se ele for irrelevante para a pergunta. Simplesmente declare que o tópico específico não foi abordado.
+
+            **Exemplo de uma recusa correta:**
+            Se a pergunta for "O que é o PGR da NR-01?" e o contexto só falar de ISO 45001, sua resposta deve ser:
+            *"Com base estrita no contexto fornecido, não há informações sobre o PGR (Programa de Gerenciamento de Riscos) ou a NR 01."*
+
             ---
+            **Contexto Relevante (Sua única fonte da verdade):**
             {relevant_context}
             ---
 
             **Pergunta do Usuário:**
             {question}
 
-            **Sua Resposta:**
+            **Sua Resposta (Siga as Regras de Ouro):**
             """
             
             try:
