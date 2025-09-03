@@ -51,7 +51,7 @@ class GeminiRAG:
                 raise ValueError("A chave da API não pode ser vazia.")
                 
             genai.configure(api_key=api_key)
-            self.model_generator = genai.GenerativeModel('gemini-2.5-pro)
+            self.model_generator = genai.GenerativeModel('gemini-2.5-pro')
             logging.info("Modelo Gerador (Gemini) configurado com sucesso.")
             self._ready = True
 
@@ -73,7 +73,6 @@ class GeminiRAG:
             return "Base de conhecimento indisponível."
 
         try:
-            # --- MUDANÇA CRÍTICA: Usando o modelo embedding-001 para a pergunta ---
             result = genai.embed_content(
                 model='models/embedding-001',
                 content=query_text
