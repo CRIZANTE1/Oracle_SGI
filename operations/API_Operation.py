@@ -74,7 +74,7 @@ class GeminiRAG:
 
         try:
             query_embedding_result = genai.embed_content(
-                model='models/text-embedding-004',
+                model='models/gemini-embedding-001',
                 content=[query_text],
                 task_type="RETRIEVAL_QUERY"
             )
